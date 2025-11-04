@@ -1,0 +1,83 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <linux/i2c-dev.h>
+#include <sys/ioctl.h>
+
+#define I2C_BUS "/dev/i2c-1"
+#define PCA9685_ADDR 0x40
+
+// Registres
+#define MODE1 0x00
+#define PRESCALE 0xFE
+
+#define LED0_ON_L 0x06
+
+// Calcul du tick (angle 0-180° → 205-410)
+int angle_to_ticks(int angle) {
+    if (angle < 0) angle = 0;
+    if (angle > 180) angle = 180;
+    return 205 + (int)((angle / 180.0) * (410 - 205));
+}
+
+// Écriture registre 8 bits
+void i2c_write(int fd, unsigned char reg, unsigned char data) {
+    unsigned char buffer[2] = {reg, data};
+    write(fd, buffer, 2);
+}
+
+// Configuration fréquence PWM ~50Hz
+void pca9685_init(int fd) {
+    i2c_write(fd, MODE1, 0x10);          // Sleep
+    i2c_write(fd, PRESCALE, 0x7F);       // Prescaler for 50 Hz
+    i2c_write(fd, MODE1, 0xA0);          // Auto-incrément + restart
+    usleep(500);                         // Pause pour stabilisation
+}
+
+// Appliquer PWM sur un canal donné
+void set_servo_angle(int fd, int channel, int angle) {
+    int ticks = angle_to_ticks(angle);
+    int led_base = LED0_ON_L + 4 * channel;
+
+    // LEDn_ON = 0, LEDn_OFF = ticks
+    i2c_write(fd, led_base + 0, 0x00);         // ON_L
+    i2c_write(fd, led_base + 1, 0x00);         // ON_H
+    i2c_write(fd, led_base + 2, ticks & 0xFF); // OFF_L
+    i2c_write(fd, led_base + 3, (ticks >> 8)); // OFF_H
+}
+
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: %s [canal 0-15]  <angle 0-180>\n", argv[0]);
+        return 1;
+    }
+
+    int channel = argc > 2 ? atoi(argv[1]) : 0;
+    int angle = atoi(argv[2]);
+
+    if (channel < 0 || channel > 15) {
+        fprintf(stderr, "Erreur : canal doit être entre 0 et 15\n");
+        return 2;
+    }
+
+    int fd = open(I2C_BUS, O_RDWR);
+    if (fd < 0) {
+        perror("Erreur d'ouverture I2C");
+        return 3;
+    }
+
+    if (ioctl(fd, I2C_SLAVE, PCA9685_ADDR) < 0) {
+        perror("Erreur d'accès au périphérique I2C");
+        close(fd);
+        return 4;
+    }
+
+    pca9685_init(fd);
+    set_servo_angle(fd, channel, angle);
+
+    printf("Servo canal %d → %d°\n", channel, angle);
+
+    close(fd);
+    return 0;
+}
