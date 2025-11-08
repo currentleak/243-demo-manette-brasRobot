@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -O2
-SRC = main_servo.c pca9685.c
-OUT = servo_control
+SRC = manette.c pca9685.c
+OUT = manette
 
 all:
 	$(CC) $(SRC) -o $(OUT) $(CFLAGS) -lm
