@@ -4,7 +4,7 @@
  * @brief   Exemple de code C pour demo Manette bras robot
  *         
  * @author  Kevin Cotton
- * @date    2025-07-06
+ * @date    2025-11-07
  *
  */
 
@@ -220,6 +220,8 @@ int main(int argc, char *argv[])
 	int angle_epaule = (int)MAX_ANGLE/2;
 	int angle_coude = (int)MAX_ANGLE/2;
 
+	int home_mode = 0;
+
 	static uint8_t prev = 0;
 
 	// set all servo to default
@@ -244,71 +246,91 @@ int main(int argc, char *argv[])
 				// Calculer le checksum
 				checksum += read_buffer[i];
 			} 
+
 			if(checksum != read_buffer[tailleMessage-1]) // Vérifier le checksum
 			{
 				printf("Erreur de checksum: %d != %d\n", checksum, read_buffer[bytes_read-1]);
 				tcflush(fd_portUART, TCIFLUSH);
 			}
 			// todo : verifier que le premier octet est le bon : 'S' pour Start
-
 			else
 			{
                 //printValueToTerminal();
-
-				/// Joystick -- Base et Poignet
-				x_axis_L = read_buffer[3];
-                angle = (int)(((x_axis_L) / 255.0) * MAX_ANGLE);
-				if(angle > 800)
-					angle = 800;
-				else if(angle < 400)
-					angle = 400;
-                set_servo_angle(i2c_fd, SERVO_BASE, angle);
-                printf("\nAxe X gauche = %6d → Angle = %4d°   ", x_axis_L, angle);
-
-				y_axis_L = read_buffer[4];
-                angle = (int)(((y_axis_L) / 255.0) * MAX_ANGLE);
-                set_servo_angle(i2c_fd, SERVO_POIGNET, angle);
-                printf("\nAxe Y gauche = %6d → Angle = %4d°   ", y_axis_L, angle);
-				printf("\n");
-
-				/// Encodeur -- Main
-    			uint8_t A = (read_buffer[5] >> 7) & 1;
-   				uint8_t B = (read_buffer[5] >> 3) & 1;
-    			uint8_t curr = (A << 1) | B;
-    			if ((prev == 0 && curr == 1) || (prev == 1 && curr == 3) || (prev == 3 && curr == 2) || (prev == 2 && curr == 0))
-        			angle_main = angle_main +100;
-   				else if ((prev == 0 && curr == 2) || (prev == 2 && curr == 3) || (prev == 3 && curr == 1) || (prev == 1 && curr == 0))
-        			angle_main = angle_main -100;	
-				angle_main = CheckAngleMax(angle_main);
-	
-				set_servo_angle(i2c_fd, SERVO_MAIN, angle_main);
- 				printf("angle_main = %4d°   ", angle_main);
-    			prev = curr;
-
-				/// 4 Bouttons flèche de droite -- Epaule et Coude
-				if( (BOUTON_Y & read_buffer[8]) == 0)
+				if(home_mode==0)
 				{
-					angle_epaule = angle_epaule + 3;
-				}
-				if( (BOUTON_A & read_buffer[8]) == 0)
-				{
-					angle_epaule = angle_epaule - 3;
-				}
-				angle_epaule = CheckAngleMax(angle_epaule);
-				set_servo_angle(i2c_fd, SERVO_EPAULE, angle_epaule);
-				printf("angle_epaule: %d ", angle_epaule);
+					/// Joystick -- Base et Poignet
+					x_axis_L = read_buffer[3];
+					angle = (int)(((x_axis_L) / 255.0) * MAX_ANGLE);
+					if(angle > 800)
+						angle = 800;
+					else if(angle < 400)
+						angle = 400;
+					set_servo_angle(i2c_fd, SERVO_BASE, angle);
+					printf("\nAxe X gauche = %6d → Angle = %4d°   ", x_axis_L, angle);
 
-				if( (BOUTON_X & read_buffer[8]) == 0)
-				{
-					angle_coude = angle_coude + 3;
+					y_axis_L = read_buffer[4];
+					angle = (int)(((y_axis_L) / 255.0) * MAX_ANGLE);
+					set_servo_angle(i2c_fd, SERVO_POIGNET, angle);
+					printf("\nAxe Y gauche = %6d → Angle = %4d°   ", y_axis_L, angle);
+					printf("\n");
+
+					/// Encodeur -- Main
+					uint8_t A = (read_buffer[5] >> 7) & 1;
+					uint8_t B = (read_buffer[5] >> 3) & 1;
+					uint8_t curr = (A << 1) | B;
+					if ((prev == 0 && curr == 1) || (prev == 1 && curr == 3) || (prev == 3 && curr == 2) || (prev == 2 && curr == 0))
+						angle_main = angle_main +100;
+					else if ((prev == 0 && curr == 2) || (prev == 2 && curr == 3) || (prev == 3 && curr == 1) || (prev == 1 && curr == 0))
+						angle_main = angle_main -100;	
+					angle_main = CheckAngleMax(angle_main);
+		
+					set_servo_angle(i2c_fd, SERVO_MAIN, angle_main);
+					printf("angle_main = %4d°   ", angle_main);
+					prev = curr;
+
+					/// 4 Bouttons flèche de droite -- Epaule et Coude
+					if( (BOUTON_Y & read_buffer[8]) == 0)
+					{
+						angle_epaule = angle_epaule + 3;
+					}
+					if( (BOUTON_A & read_buffer[8]) == 0)
+					{
+						angle_epaule = angle_epaule - 3;
+					}
+					angle_epaule = CheckAngleMax(angle_epaule);
+					set_servo_angle(i2c_fd, SERVO_EPAULE, angle_epaule);
+					printf("angle_epaule: %d ", angle_epaule);
+
+					if( (BOUTON_X & read_buffer[8]) == 0)
+					{
+						angle_coude = angle_coude + 3;
+					}
+					if( (BOUTON_B & read_buffer[8]) == 0)
+					{
+						angle_coude = angle_coude - 3;
+					}
+					angle_coude = CheckAngleMax(angle_coude);
+					set_servo_angle(i2c_fd, SERVO_COUDE, angle_coude);
+					printf("angle_coude: %d ", angle_coude);
 				}
-				if( (BOUTON_B & read_buffer[8]) == 0)
+
+				/// Bras robot Go Home
+				if( (BOUTON_HOME & read_buffer[9]) == 0)
 				{
-					angle_coude = angle_coude - 3;
+					if(home_mode==1)
+						home_mode=0;
+					else
+					{
+						home_mode=1;
+						set_servo_angle(i2c_fd, SERVO_BASE, 672);
+						set_servo_angle(i2c_fd, SERVO_EPAULE, 450);
+						set_servo_angle(i2c_fd, SERVO_COUDE, 180);	
+						set_servo_angle(i2c_fd, SERVO_POIGNET, 900);
+						set_servo_angle(i2c_fd, SERVO_MAIN, 0);
+					}
 				}
-				angle_coude = CheckAngleMax(angle_coude);
-				set_servo_angle(i2c_fd, SERVO_COUDE, angle_coude);
-				printf("angle_coude: %d ", angle_coude);
+
+
 
                 fflush(stdout);
 			}
