@@ -1,13 +1,13 @@
 /**
  * @file    243-336_TestManette1.c
  * 
- * @brief   Exemple de code C pour test de la Manette
- * 			processus (thread) avec la commande fork, utilisation de pipe
- *          Lecture/Ecriture sur port série UART
+ * @brief   Exemple de code C pour demo Manette bras robot
+ *         
  * @author  Kevin Cotton
  * @date    2025-07-06
  *
  */
+
 #define _GNU_SOURCE 
 
 #include <stdlib.h> // Standard Library Definition
@@ -24,119 +24,15 @@
 #include <linux/uinput.h>
 
 #include "manette.h"
+#include "pca9685.h"
+
+#include "pca9685.c"
+
+#define I2C_BUS "/dev/i2c-1"
 
 char* portTTY = "/dev/ttyUSB0";
 
-/// @brief processus: Lecture sur le port Série, écriture dans le terminal
-/// @param fd_UART: descripteur de fichier pour le port serie UART
-void LirePortSerie(int fd_UART)
-{
-    // Read data from serial port 
-	tcflush(fd_UART, TCIFLUSH);  // Discards old data in the rx buffer
-	u_char read_buffer[32];   // Buffer to store the data received 
-	int  bytes_read = 0;    // Number of bytes read by the read() system call 
-	int i = 0;
-	u_int8_t checksum = 0;  // checksum sur 8bit comme le PIC16F88 8bit
-
-	while(1) 
-	{
-		bytes_read = read(fd_UART, &read_buffer, 32); // Lecture des données sur le port série 		
-		//printf(" octets recus : %d --> ", bytes_read); // Print the number of bytes read
-
-		if (bytes_read == tailleMessage) // Si 11 octets lus, c'est un message de commande
-		{
-			//printf("Commande reçue: \n");
-			
-			// if(read_buffer[bytes_read-1] == caractereFermeUART) // Vérifier le caractère de fermeture
-			// 	return;
-
- 			for(i=0; i<tailleMessage-1; i++)
-			{
-				// if(read_buffer[i] == caractereFermeUART)
-				// 	return;
-				// Calculer le checksum
-				checksum += read_buffer[i];
-			} 
-			if(checksum != read_buffer[tailleMessage-1]) // Vérifier le checksum
-			{
-				printf("Erreur de checksum: %d != %d\n", checksum, read_buffer[bytes_read-1]);
-				tcflush(fd_UART, TCIFLUSH);
-			}
-			// todo : verifier que le premier octet est le bon : 'S' pour Start
-
-			else
-			{
-				printf("\033[2J"); // Effacer l'écran
-				printf("\033[H");  // Revenir au début de l'écran
-				// Afficher les données lues -- ADC Thumbsticks, boutons, etc.
-				printf("Thumbstick Droite X: %d", read_buffer[1]);
-				printf(" Y: %d\n", read_buffer[2]);
-				printf("Thumbstick Gauche X: %d", read_buffer[3]);
-				printf(" Y: %d\n", read_buffer[4]);
-
-				printf("Encoder: %d (0b", read_buffer[5]);
-				printf(")\n");
-
-				printf("Sel.1: %d ", BOUTON_SELECT_1 & read_buffer[6]);
-				printf("Sel.2: %d\n", BOUTON_SELECT_2 & read_buffer[6]);
-				printf("Top L: %d\n", BOUTON_TOP_L & read_buffer[6]);
-				printf("Haut: %d ", BOUTON_HAUT & read_buffer[6]);	
-				printf("Gauche: %d ", BOUTON_GAUCHE & read_buffer[6]);
-				printf("Droite: %d ", BOUTON_DROITE & read_buffer[6]);
-				printf("Bas: %d\n", BOUTON_BAS & read_buffer[6]);
-				printf("Bot1 L: %d\n", BOUTON_BOT1_L & read_buffer[6]);				
-
-				printf("Bot2 L: %d\n", BOUTON_BOT2_L & read_buffer[7]);
-				printf("TS L: %d\n", BOUTON_TS_L & read_buffer[7]);
-
-				printf("Sel.3: %d ", BOUTON_SELECT_3 & read_buffer[8]);
-				printf("Sel.4: %d\n", BOUTON_SELECT_4 & read_buffer[8]);
-				printf("Top R: %d\n", BOUTON_TOP_R & read_buffer[8]);
-				printf("Y: %d ", BOUTON_Y & read_buffer[8]);
-				printf("X: %d ", BOUTON_X & read_buffer[8]);
-				printf("B: %d ", BOUTON_B & read_buffer[8]);
-				printf("A: %d\n", BOUTON_A & read_buffer[8]);
-	 			printf("Bot1 R: %d\n", BOUTON_BOT1_R & read_buffer[8]);
-				printf("Bot2 R: %d\n", BOUTON_BOT2_R & read_buffer[9]);
-				printf("TS R: %d\n", BOUTON_TS_R & read_buffer[9]);
-				printf("HOME: %d\n", BOUTON_HOME & read_buffer[9]);
-
-			}
-			checksum = 0; // Réinitialiser le checksum pour la prochaine lecture
-	
-		}
-		else if (bytes_read < 0) // Si erreur de lecture
-		{
-			printf("\n Erreur de lecture du port série %s\n", portTTY);
-			perror("Erreur de lecture du port série");
-			exit(-1);
-		}
-		else if (bytes_read == 0) // Si aucune donnée lue
-		{
-			printf("\n Aucune donnée lue sur le port série %s\n", portTTY);
-		}
-		else if (bytes_read > 0) // Si des données ont été lues
-		{
-			printf("Données lues: nombres incompatibles avec la commande\n");
-		}
-
-	}
-}
-
-/// @brief processus: Lecture dans le terminal, écriture sur le port série
-/// @param fd_UART: descripteur de fichier pour le port serie UART
-/// @param 
-void EcrirePortSerie(int fd_UART)
-{
-	while(1)
-	{
-    char caractere; 	// character to write into port
-	caractere = getchar(); // Lecture des données dans le terminal
-    write(fd_UART, &caractere, sizeof(caractere)); // Écriture des données sur le port série
-	//printf(".%c.", caractere);			
-	}
-	
-}
+char read_buffer[32];   // Buffer to store the data received 
 
 /// @brief processus: Config et ouverture du port série UART
 /// @param Return: File Descriptor du port série
@@ -151,7 +47,7 @@ int OuvrirConfigurerPortSerie(void)
 		perror("open_port: Unable to open serial port");
 		return -1;
 	}
-	printf("\n Ouverture de %s reussit, fd=%d ", portTTY, fd_UART);
+	//printf("\n Ouverture de %s reussit, fd=%d ", portTTY, fd_UART);
 	// Setting the Attributes of the serial port using termios structure 
 	struct termios SerialPortSettings;	// Create the structure 
 	tcgetattr(fd_UART, &SerialPortSettings);	// Get the current attributes of the Serial port 
@@ -205,6 +101,35 @@ int OuvrirConfigurerPortSerie(void)
     return fd_UART;
 }
 
+void printValueToTerminal(void)
+{
+				printf("Thumbstick Droite X: %d", read_buffer[1]);
+				printf(" Y: %d\n", read_buffer[2]);
+				printf("Thumbstick Gauche X: %d", read_buffer[3]);
+				printf(" Y: %d\n", read_buffer[4]);
+				printf("Encoder: %d (0b", read_buffer[5]);
+				printf(")\n");
+
+				printf("Top L: %d\n", BOUTON_TOP_L & read_buffer[6]);
+				printf("Haut: %d ", BOUTON_HAUT & read_buffer[6]);	
+				printf("Gauche: %d ", BOUTON_GAUCHE & read_buffer[6]);
+				printf("Droite: %d ", BOUTON_DROITE & read_buffer[6]);
+				printf("Bas: %d\n", BOUTON_BAS & read_buffer[6]);
+				printf("Bot1 L: %d\n", BOUTON_BOT1_L & read_buffer[6]);				
+				printf("Bot2 L: %d\n", BOUTON_BOT2_L & read_buffer[7]);
+
+				printf("Top R: %d\n", BOUTON_TOP_R & read_buffer[8]);
+				printf("Y: %d ", BOUTON_Y & read_buffer[8]);
+				printf("X: %d ", BOUTON_X & read_buffer[8]);
+				printf("B: %d ", BOUTON_B & read_buffer[8]);
+				printf("A: %d\n", BOUTON_A & read_buffer[8]);
+	 			printf("Bot1 R: %d\n", BOUTON_BOT1_R & read_buffer[8]);
+				printf("Bot2 R: %d\n", BOUTON_BOT2_R & read_buffer[9]);
+				printf("HOME: %d\n", BOUTON_HOME & read_buffer[9]);
+
+}
+
+
 /// @brief Exemple de processus gestion du port série UART
 /// @return 0 on success, -1 on error
 int main(int argc, char *argv[])
@@ -215,7 +140,8 @@ int main(int argc, char *argv[])
 		printf("1 : Port USB (ttyUSB0)\n");
 		printf("2 : Bluetooth (rfcomm0)\n");
 		printf("3 : raw UART (ttyAMA0)\n");
-		printf("Exemple pour connexion USB: %s 1\n", argv[0]);
+		printf("4 : Port USB (ttyUSB1)\n");
+		printf("Exemple pour connexion USB0: %s 1\n", argv[0]);
 		return 1;
 	}
 	else 
@@ -232,6 +158,10 @@ int main(int argc, char *argv[])
 		{
 			portTTY = "/dev/ttyAMA0";
 		}
+		else if (*argv[1]=='4')
+		{
+			portTTY = "/dev/ttyUSB1";
+		}
 		else
 		{
 			printf("default : ttyUSB0\n");
@@ -239,8 +169,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
-    int fd_portUART; /// descripteur de fichier pour le port UART (TTY)
-
+    // ouvrire le port uart
+    int fd_portUART;
 	fd_portUART = OuvrirConfigurerPortSerie();
     if (fd_portUART >0)
 		printf("Ouverture du port série %s réussie, fd=%d\n", portTTY, fd_portUART);
@@ -248,39 +178,162 @@ int main(int argc, char *argv[])
 		printf("Erreur lors de l'ouverture du port série %s\n", portTTY);
 		exit(1);
 	}  
+    // Read data from serial port 
+	tcflush(fd_portUART, TCIFLUSH);  // Discards old data in the rx buffer
+    int  bytes_read = 0;    // Number of bytes read by the read() system call 
+	u_int8_t checksum = 0;  // checksum sur 8bit comme le PIC16F88 8bit
 
-
-    pid_t pidEcrire, pidLire;
-    pidEcrire = fork(); // processus enfant 1
-    if (pidEcrire == 0) {
-		EcrirePortSerie(fd_portUART);
-        printf("Fin du processus Ecriture PortSerie\n"); // enfant 1
-    	}
-    else {
-		pidLire = fork(); // processus enfant 2
-		if (pidLire == 0) {
-			LirePortSerie(fd_portUART);
-        	printf("Fin du processus Lecture PortSerie\n"); 
-		}
-		else {
-			// faire processus principal
-			int n=1;
-
-			while(n < 5) {
-				printf("%d faire quelques trucs...\n", n);
-				// TODO: 
-				
-				n++;
-				sleep(3);
-			}
-			
-			wait(NULL);	// attendre la fin de enfant 1
-			wait(NULL); // attendre la fin de enfant 2
-			close(fd_portUART);	// Fermer le port série
-			printf("Fin du processus Principal\n");
-		}
-
-        fflush(NULL);
+    // Ouvrir le bus I2C
+    int i2c_fd;
+    i2c_fd = open(I2C_BUS, O_RDWR);
+    if (i2c_fd < 0) {
+        perror("Erreur ouverture I2C");
+		close(fd_portUART);
+        return 2;
     }
+    if (ioctl(i2c_fd, I2C_SLAVE, PCA9685_ADDR) < 0) {
+        perror("Erreur accès PCA9685");
+        close(i2c_fd);
+		close(fd_portUART);
+        return 3;
+    }
+    // Initialiser le PCA9685
+    if(pca9685_init(i2c_fd) != 0)
+	{
+		perror("Erreur init PCA9685");
+		close(i2c_fd);
+		close(fd_portUART);
+		return 4;
+	}
+
+	int counter = 0;
+    uint8_t prev_state = 0;
+    uint8_t curr_state;
+
+    int16_t x_axis_L = 0;
+	int16_t y_axis_L = 0;
+	int16_t x_axis_R = 0;
+	int16_t y_axis_R = 0;
+
+    int angle = (int)MAX_ANGLE/2;
+	int angle_main = (int)MAX_ANGLE/2;
+	int angle_epaule = (int)MAX_ANGLE/2;
+	int angle_coude = (int)MAX_ANGLE/2;
+
+	static uint8_t prev = 0;
+
+	// set all servo to default
+	set_servo_angle(i2c_fd, SERVO_MAIN, angle_main);
+	set_servo_angle(i2c_fd, SERVO_POIGNET, angle);
+	set_servo_angle(i2c_fd, SERVO_COUDE, angle_coude);
+	set_servo_angle(i2c_fd, SERVO_EPAULE, angle_epaule);
+	set_servo_angle(i2c_fd, SERVO_BASE, angle);
+
+    int i = 0;
+	while(1) 
+	{
+		bytes_read = read(fd_portUART, &read_buffer, 32); // Lecture des données sur le port série 		
+		//printf(" octets recus : %d --> ", bytes_read); // Print the number of bytes read
+
+		if (bytes_read == tailleMessage) // Si 11 octets lus, c'est un message de commande
+		{
+ 			for(i=0; i<tailleMessage-1; i++)
+			{
+				// if(read_buffer[i] == caractereFermeUART)
+				// 	return;
+				// Calculer le checksum
+				checksum += read_buffer[i];
+			} 
+			if(checksum != read_buffer[tailleMessage-1]) // Vérifier le checksum
+			{
+				printf("Erreur de checksum: %d != %d\n", checksum, read_buffer[bytes_read-1]);
+				tcflush(fd_portUART, TCIFLUSH);
+			}
+			// todo : verifier que le premier octet est le bon : 'S' pour Start
+
+			else
+			{
+                //printValueToTerminal();
+
+				/// Joystick -- Base et Poignet
+				x_axis_L = read_buffer[3];
+                angle = (int)(((x_axis_L) / 255.0) * MAX_ANGLE);
+				if(angle > 800)
+					angle = 800;
+				else if(angle < 400)
+					angle = 400;
+                set_servo_angle(i2c_fd, SERVO_BASE, angle);
+                printf("\nAxe X gauche = %6d → Angle = %4d°   ", x_axis_L, angle);
+
+				y_axis_L = read_buffer[4];
+                angle = (int)(((y_axis_L) / 255.0) * MAX_ANGLE);
+                set_servo_angle(i2c_fd, SERVO_POIGNET, angle);
+                printf("\nAxe Y gauche = %6d → Angle = %4d°   ", y_axis_L, angle);
+				printf("\n");
+
+				/// Encodeur -- Main
+    			uint8_t A = (read_buffer[5] >> 7) & 1;
+   				uint8_t B = (read_buffer[5] >> 3) & 1;
+    			uint8_t curr = (A << 1) | B;
+    			if ((prev == 0 && curr == 1) || (prev == 1 && curr == 3) || (prev == 3 && curr == 2) || (prev == 2 && curr == 0))
+        			angle_main = angle_main +100;
+   				else if ((prev == 0 && curr == 2) || (prev == 2 && curr == 3) || (prev == 3 && curr == 1) || (prev == 1 && curr == 0))
+        			angle_main = angle_main -100;	
+				angle_main = CheckAngleMax(angle_main);
+	
+				set_servo_angle(i2c_fd, SERVO_MAIN, angle_main);
+ 				printf("angle_main = %4d°   ", angle_main);
+    			prev = curr;
+
+				/// 4 Bouttons flèche de droite -- Epaule et Coude
+				if( (BOUTON_Y & read_buffer[8]) == 0)
+				{
+					angle_epaule = angle_epaule + 3;
+				}
+				if( (BOUTON_A & read_buffer[8]) == 0)
+				{
+					angle_epaule = angle_epaule - 3;
+				}
+				angle_epaule = CheckAngleMax(angle_epaule);
+				set_servo_angle(i2c_fd, SERVO_EPAULE, angle_epaule);
+				printf("angle_epaule: %d ", angle_epaule);
+
+				if( (BOUTON_X & read_buffer[8]) == 0)
+				{
+					angle_coude = angle_coude + 3;
+				}
+				if( (BOUTON_B & read_buffer[8]) == 0)
+				{
+					angle_coude = angle_coude - 3;
+				}
+				angle_coude = CheckAngleMax(angle_coude);
+				set_servo_angle(i2c_fd, SERVO_COUDE, angle_coude);
+				printf("angle_coude: %d ", angle_coude);
+
+                fflush(stdout);
+			}
+			checksum = 0; // Réinitialiser le checksum pour la prochaine lecture
+	
+		}
+		else if (bytes_read < 0) // Si erreur de lecture
+		{
+			printf("\n Erreur de lecture du port série %s\n", portTTY);
+			perror("Erreur de lecture du port série");
+			exit(-1);
+		}
+		else if (bytes_read == 0) // Si aucune donnée lue
+		{
+			printf("\n Aucune donnée lue sur le port série %s\n", portTTY);
+		}
+		else if (bytes_read > 0) // Si des données ont été lues
+		{
+			printf("Données lues: nombres incompatibles avec la commande\n");
+		}
+
+	}
+
+
+	close(i2c_fd);
+    close(fd_portUART);
     return 0;
 }

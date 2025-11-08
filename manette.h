@@ -1,3 +1,7 @@
+#ifndef MANETTE_H
+#define MANETTE_H
+
+
 //const char* portTTY = "/dev/ttyUSB0";
 //const char* portTTY = "/dev/ttyAMA0";
 const char caractereFermeUART = '!';
@@ -35,3 +39,6 @@ const u_int8_t BOUTON_TS_R = 0x02;
 //const u_int8_t DEL_ORANGE = 0x08; 
  
 const u_int8_t BOUTON_HOME = 0x80; 
+
+
+#endif
